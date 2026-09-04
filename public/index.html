@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>그냥전당포 - 도스온라인 전당포</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏦</text></svg>">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site-header">
+    <h1>그냥전당포</h1>
+    <div class="domain">그냥전당포.com · 도스온라인 전당포</div>
+    <div><span id="openBadge" class="open-badge open">영업중</span></div>
+  </header>
+
+  <div class="notice" id="notice">불러오는 중...</div>
+
+  <nav class="tabs">
+    <button data-tab="shop" class="active">판매 물품</button>
+    <button data-tab="sell">감정신청</button>
+    <button data-tab="buy">구매신청</button>
+    <button data-tab="my">내 신청 조회</button>
+  </nav>
+
+  <!-- 판매 물품 -->
+  <section class="tab-page active" id="page-shop">
+    <div class="card">
+      <h2>지금 판매 중인 물품</h2>
+      <p class="desc">원하는 물품이 있으면 [주문] 버튼을 눌러 구매신청을 넣어주세요.</p>
+      <div id="stockList"><div class="empty">불러오는 중...</div></div>
+    </div>
+  </section>
+
+  <!-- 매입신청 -->
+  <section class="tab-page" id="page-sell">
+    <div class="card">
+      <h2>물건 팔기 · 감정신청</h2>
+      <p class="desc">사장님이 물품을 직접 감정해서 매입가를 알려드립니다. 감정 결과는 '내 신청 조회'에서 확인하세요.</p>
+      <label>마인크래프트 닉네임 *</label>
+      <input type="text" id="sellNick" maxlength="30" placeholder="예: Steve123">
+      <div class="row2">
+        <div>
+          <label>팔 물품 *</label>
+          <input type="text" id="sellItem" maxlength="60" placeholder="예: 다이아몬드">
+        </div>
+        <div>
+          <label>수량 *</label>
+          <input type="text" id="sellQty" maxlength="30" placeholder="예: 64개">
+        </div>
+      </div>
+      <label>물품 전달 방법 *</label>
+      <div class="radio-group">
+        <label><input type="radio" name="sellDelivery" value="직접" checked> 사장님이 접속하면 직접 전달할게요</label>
+        <label><input type="radio" name="sellDelivery" value="우편"> 우편으로 보내둘게요</label>
+      </div>
+      <label>메모 (선택)</label>
+      <textarea id="sellNote" maxlength="200" placeholder="추가로 전할 말"></textarea>
+      <button class="primary" id="sellSubmit">감정 신청하기</button>
+    </div>
+  </section>
+
+  <!-- 구매신청 -->
+  <section class="tab-page" id="page-buy">
+    <div class="card">
+      <h2>물건 사기 · 구매신청</h2>
+      <p class="desc">판매 물품 탭에서 [주문]을 누르면 자동으로 채워집니다. 목록에 없는 물품도 신청 가능!</p>
+      <label>마인크래프트 닉네임 *</label>
+      <input type="text" id="buyNick" maxlength="30" placeholder="예: Steve123">
+      <div class="row2">
+        <div>
+          <label>살 물품 *</label>
+          <input type="text" id="buyItem" maxlength="60" placeholder="예: 겉날개">
+        </div>
+        <div>
+          <label>수량 *</label>
+          <input type="text" id="buyQty" maxlength="30" placeholder="예: 1개">
+        </div>
+      </div>
+      <div class="price-box" id="buyPriceBox" hidden>
+        가격 <b id="buyPriceText"></b> — 이 금액을 먼저 인게임으로 입금해주세요.
+      </div>
+      <label>입금내역 캡쳐 <span id="buyImageRequired" hidden>*</span></label>
+      <div class="dropzone" id="dropzone">
+        <span>클릭하거나 이미지를 끌어다 놓으세요</span>
+      </div>
+      <input type="file" id="buyImageFile" accept="image/*" hidden>
+      <div class="image-preview" id="imagePreview" hidden>
+        <img id="previewImg" alt="입금내역 캡쳐 미리보기">
+        <button type="button" class="small danger" id="removeImage">첨부 취소</button>
+      </div>
+      <p class="hint">인게임에서 먼저 입금한 뒤, 입금내역 화면을 캡쳐해서 첨부해주세요.<br>
+      <b>입금 확인 후 우편으로 물품을 보내드립니다.</b></p>
+      <label>메모 (선택)</label>
+      <textarea id="buyNote" maxlength="200" placeholder="추가로 전할 말"></textarea>
+      <input type="hidden" id="buyStockId">
+      <button class="primary" id="buySubmit">구매신청 넣기</button>
+    </div>
+  </section>
+
+  <!-- 내 신청 조회 -->
+  <section class="tab-page" id="page-my">
+    <div class="card">
+      <h2>내 신청 조회</h2>
+      <p class="desc">신청할 때 쓴 닉네임으로 처리 상태를 확인하세요.</p>
+      <div class="row2">
+        <input type="text" id="myNick" maxlength="30" placeholder="마인크래프트 닉네임">
+        <button class="primary" id="myLookup" style="margin-top:0">조회하기</button>
+      </div>
+      <div id="myResult"></div>
+    </div>
+  </section>
+
+  <div class="footer">
+    그냥전당포 · 도스온라인 · <a href="/admin">관리자</a>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

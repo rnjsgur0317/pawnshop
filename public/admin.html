@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>그냥전당포 - 관리자</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>">
+<style>
+  .req-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; background: #fafafa; }
+  .req-card .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .req-card .controls { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .req-card .controls select { width: auto; padding: 7px; }
+  .req-card .controls input { flex: 1; min-width: 140px; padding: 7px; }
+  .count-badge { background: #111; color: #fff; border-radius: 999px; font-size: .72rem; padding: 1px 7px; margin-left: 5px; vertical-align: 2px; }
+  .tabs button.active .count-badge { background: #fff; color: #111; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 20px 0 14px; }
+  .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; text-align: center; }
+  .stat .num { font-size: 1.6rem; font-weight: 800; color: #111; }
+  .stat .lbl { font-size: .8rem; color: var(--text-dim); margin-top: 2px; }
+  .filter-bar { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site-header">
+    <h1>그냥전당포 관리자</h1>
+    <div class="domain">사장님 전용</div>
+  </header>
+
+  <!-- 초기 설정 -->
+  <section id="viewSetup" style="display:none">
+    <div class="card">
+      <h2>첫 실행 · 관리자 비밀번호 설정</h2>
+      <p class="desc">이 비밀번호로 관리자 페이지에 로그인하게 됩니다. (4자 이상)</p>
+      <label>비밀번호</label>
+      <input type="password" id="setupPw">
+      <label>비밀번호 확인</label>
+      <input type="password" id="setupPw2">
+      <button class="primary" id="setupBtn">설정하고 시작하기</button>
+    </div>
+  </section>
+
+  <!-- 로그인 -->
+  <section id="viewLogin" style="display:none">
+    <div class="card">
+      <h2>로그인</h2>
+      <label>관리자 비밀번호</label>
+      <input type="password" id="loginPw">
+      <button class="primary" id="loginBtn">로그인</button>
+    </div>
+  </section>
+
+  <!-- 대시보드 -->
+  <section id="viewDash" style="display:none">
+    <div class="stat-grid" id="stats"></div>
+
+    <nav class="tabs">
+      <button data-tab="incoming" class="active">들어온 물품<span id="cntIncoming" class="count-badge" hidden></span></button>
+      <button data-tab="sell">감정신청<span id="cntSell" class="count-badge" hidden></span></button>
+      <button data-tab="buy">구매신청<span id="cntBuy" class="count-badge" hidden></span></button>
+      <button data-tab="stock">재고 관리</button>
+      <button data-tab="settings">설정</button>
+    </nav>
+
+    <section class="tab-page active" id="page-incoming">
+      <div class="card">
+        <h2>우편으로 들어온 물품</h2>
+        <p class="desc">유저가 "우편으로 보내둘게요"로 매입신청한 목록입니다. 게임에서 우편함을 확인하고 [수령 확인]을 눌러주세요.</p>
+        <div id="incomingList"></div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="page-sell">
+      <div class="card">
+        <h2>감정신청 · 유저가 파는 것</h2>
+        <p class="desc">물품을 감정한 뒤 감정가를 입력하고 저장하면 유저의 '내 신청 조회'에 표시됩니다.</p>
+        <div class="filter-bar" data-filter-for="sell">
+          <button class="small active" data-f="전체">전체</button>
+          <button class="small" data-f="대기">대기</button>
+          <button class="small" data-f="승인">승인</button>
+          <button class="small" data-f="완료">완료</button>
+          <button class="small" data-f="거절">거절</button>
+        </div>
+        <div id="sellList"></div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="page-buy">
+      <div class="card">
+        <h2>구매신청 · 유저가 사는 것</h2>
+        <div class="filter-bar" data-filter-for="buy">
+          <button class="small active" data-f="전체">전체</button>
+          <button class="small" data-f="대기">대기</button>
+          <button class="small" data-f="승인">승인</button>
+          <button class="small" data-f="완료">완료</button>
+          <button class="small" data-f="거절">거절</button>
+        </div>
+        <div id="buyList"></div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="page-stock">
+      <div class="card">
+        <h2>판매 물품 등록</h2>
+        <div class="row2">
+          <div><label>물품 이름</label><input type="text" id="stItem" maxlength="60" placeholder="예: 겉날개"></div>
+          <div><label>가격 (자유 표기)</label><input type="text" id="stPrice" maxlength="60" placeholder="예: 15,000원"></div>
+        </div>
+        <div class="row2">
+          <div><label>수량</label><input type="number" id="stQty" min="0" value="1"></div>
+          <div><label>메모 (선택)</label><input type="text" id="stNote" maxlength="200" placeholder="예: 내구도 풀"></div>
+        </div>
+        <button class="primary" id="stAdd">등록하기</button>
+      </div>
+      <div class="card">
+        <h2>재고 목록</h2>
+        <p class="desc">수량 0이거나 숨김 처리한 물품은 유저에게 보이지 않습니다. 재고 연동 주문을 완료 처리하면 수량이 1 줄어듭니다.</p>
+        <div id="stockList"></div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="page-settings">
+      <div class="card">
+        <h2>공지 · 영업 상태</h2>
+        <label>공지사항 (첫 화면에 표시)</label>
+        <textarea id="setNotice" maxlength="500"></textarea>
+        <label>영업 상태</label>
+        <div class="radio-group">
+          <label><input type="radio" name="setOpen" value="1"> 영업중</label>
+          <label><input type="radio" name="setOpen" value="0"> 휴업중</label>
+        </div>
+        <button class="primary" id="setSave">저장</button>
+      </div>
+      <div class="card">
+        <h2>비밀번호 변경</h2>
+        <label>현재 비밀번호</label>
+        <input type="password" id="pwOld">
+        <label>새 비밀번호 (4자 이상)</label>
+        <input type="password" id="pwNew">
+        <button class="primary" id="pwChange">변경하기</button>
+      </div>
+      <div class="card">
+        <button class="small danger" id="logoutBtn" style="width:100%;padding:12px">로그아웃</button>
+      </div>
+    </section>
+  </section>
+
+  <div class="footer"><a href="/">← 유저 페이지로</a></div>
+</div>
+
+<div id="toast"></div>
+<script src="/admin.js"></script>
+</body>
+</html>
