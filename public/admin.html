@@ -112,7 +112,15 @@
           <div><label>수량</label><input type="number" id="stQty" min="0" value="1"></div>
           <div><label>메모 (선택)</label><input type="text" id="stNote" maxlength="200" placeholder="예: 내구도 풀"></div>
         </div>
+        <label>물품 사진 (선택)</label>
+        <div class="dropzone" id="stDrop"><span>클릭하거나 이미지를 끌어다 놓으세요</span></div>
+        <input type="file" id="stImageFile" accept="image/*" hidden>
+        <div class="image-preview" id="stPreview" hidden>
+          <img id="stPreviewImg" alt="물품 사진 미리보기">
+          <button type="button" class="small danger" id="stRemoveImage">첨부 취소</button>
+        </div>
         <button class="primary" id="stAdd">등록하기</button>
+        <input type="file" id="stRowImageFile" accept="image/*" hidden>
       </div>
       <div class="card">
         <h2>재고 목록</h2>

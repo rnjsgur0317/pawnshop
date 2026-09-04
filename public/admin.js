@@ -239,20 +239,29 @@ function renderStock() {
     ? cache.stock.map((s) => `
       <div class="req-card" style="${!s.visible || s.qty === 0 ? "opacity:.55" : ""}">
         <div class="head">
-          <div>
-            <div class="name"><b>${esc(s.item)}</b> <span class="price">${esc(s.price)}</span></div>
-            <div class="sub">재고 ${s.qty}개${s.note ? " · " + esc(s.note) : ""}${s.visible ? "" : " · 숨김"}</div>
+          <div style="display:flex;align-items:center;gap:12px;min-width:0">
+            ${s.image ? `<img class="stock-thumb" src="/api/stock/image?id=${s.id}&v=${Date.now()}" alt="${esc(s.item)}">` : ""}
+            <div>
+              <div class="name"><b>${esc(s.item)}</b> <span class="price">${esc(s.price)}</span></div>
+              <div class="sub">재고 ${s.qty}개${s.note ? " · " + esc(s.note) : ""}${s.visible ? "" : " · 숨김"}${s.image ? "" : " · 사진 없음"}</div>
+            </div>
           </div>
         </div>
         <div class="controls">
           <input type="number" data-qty min="0" value="${s.qty}" style="max-width:90px;flex:none">
           <button class="small" data-setqty="${s.id}">수량 저장</button>
+          <button class="small" data-photo="${s.id}">${s.image ? "사진 변경" : "사진 추가"}</button>
           <button class="small" data-toggle="${s.id}" data-visible="${s.visible}">${s.visible ? "숨기기" : "보이기"}</button>
           <button class="small danger" data-del="${s.id}">삭제</button>
         </div>
       </div>`).join("")
     : '<div class="empty">등록된 물품이 없어요.</div>';
 
+  box.querySelectorAll("[data-photo]").forEach((b) =>
+    b.addEventListener("click", () => {
+      pendingStockId = +b.dataset.photo;
+      $("#stRowImageFile").click();
+    }));
   box.querySelectorAll("[data-setqty]").forEach((b) =>
     b.addEventListener("click", async () => {
       const qty = parseInt(b.parentElement.querySelector("[data-qty]").value, 10);
@@ -281,6 +290,69 @@ function renderStock() {
     }));
 }
 
+// ---- 재고 사진 첨부
+let stImageData = "";
+let pendingStockId = null; // [사진 변경] 대상
+
+async function compressImage(file) {
+  const bitmap = await createImageBitmap(file);
+  const maxW = 1280;
+  const scale = Math.min(1, maxW / bitmap.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+function clearStImage() {
+  stImageData = "";
+  $("#stPreviewImg").src = "";
+  $("#stPreview").hidden = true;
+  $("#stDrop").hidden = false;
+  $("#stImageFile").value = "";
+}
+
+async function handleStImageFile(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    return toast("이미지 파일만 첨부할 수 있어요.", true);
+  }
+  try {
+    stImageData = await compressImage(file);
+    $("#stPreviewImg").src = stImageData;
+    $("#stPreview").hidden = false;
+    $("#stDrop").hidden = true;
+  } catch (e) {
+    toast("이미지를 읽을 수 없어요. 다른 파일로 시도해주세요.", true);
+  }
+}
+
+$("#stDrop").addEventListener("click", () => $("#stImageFile").click());
+$("#stImageFile").addEventListener("change", (e) => handleStImageFile(e.target.files[0]));
+$("#stRemoveImage").addEventListener("click", clearStImage);
+["dragover", "dragleave", "drop"].forEach((evt) =>
+  $("#stDrop").addEventListener(evt, (e) => {
+    e.preventDefault();
+    $("#stDrop").classList.toggle("dragover", evt === "dragover");
+    if (evt === "drop") handleStImageFile(e.dataTransfer.files[0]);
+  }));
+
+// 재고 목록의 [사진 변경]
+$("#stRowImageFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  const sid = pendingStockId;
+  pendingStockId = null;
+  $("#stRowImageFile").value = "";
+  if (!file || !sid) return;
+  if (!file.type.startsWith("image/")) return toast("이미지 파일만 첨부할 수 있어요.", true);
+  try {
+    const image = await compressImage(file);
+    await api("/api/admin/stock", { action: "update", id: sid, image });
+    toast("사진 변경 완료");
+    refresh();
+  } catch (err) { toast(err.message, true); }
+});
+
 // ---- 재고 등록
 $("#stAdd").addEventListener("click", async () => {
   const body = {
@@ -290,6 +362,7 @@ $("#stAdd").addEventListener("click", async () => {
     qty: parseInt($("#stQty").value, 10),
     note: $("#stNote").value.trim(),
   };
+  if (stImageData) body.image = stImageData;
   if (!body.item || !body.price || isNaN(body.qty) || body.qty < 0) {
     return toast("물품/가격/수량을 확인하세요.", true);
   }
@@ -297,6 +370,7 @@ $("#stAdd").addEventListener("click", async () => {
     await api("/api/admin/stock", body);
     ["stItem", "stPrice", "stNote"].forEach((id) => ($("#" + id).value = ""));
     $("#stQty").value = 1;
+    clearStImage();
     toast("등록 완료");
     refresh();
   } catch (e) { toast(e.message, true); }

@@ -63,15 +63,20 @@ async function loadShop() {
     }
     list.innerHTML = data.stock.map((s) => `
       <div class="item-row">
-        <div>
-          <div class="name">${esc(s.item)}</div>
-          <div class="sub">재고 ${esc(s.qty)}개${s.note ? " · " + esc(s.note) : ""}</div>
+        <div style="display:flex;align-items:center;gap:12px;min-width:0">
+          ${s.image ? `<img class="stock-thumb" src="/api/stock/image?id=${s.id}" alt="${esc(s.item)}" data-zoom>` : ""}
+          <div>
+            <div class="name">${esc(s.item)}</div>
+            <div class="sub">재고 ${esc(s.qty)}개${s.note ? " · " + esc(s.note) : ""}</div>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span class="price">${esc(s.price)}</span>
           <button class="small good" data-order="${s.id}" data-item="${esc(s.item)}" data-price="${esc(s.price)}">주문</button>
         </div>
       </div>`).join("");
+    list.querySelectorAll("[data-zoom]").forEach((img) =>
+      img.addEventListener("click", () => window.open(img.src, "_blank")));
     list.querySelectorAll("[data-order]").forEach((b) =>
       b.addEventListener("click", () => {
         $("#buyItem").value = b.dataset.item;

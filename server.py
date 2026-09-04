@@ -96,11 +96,15 @@ def init_db():
         );
         """)
         c.commit()
-        try:
-            c.execute("ALTER TABLE buy_requests ADD COLUMN image TEXT NOT NULL DEFAULT ''")
-            c.commit()
-        except sqlite3.OperationalError:
-            pass  # 이미 컬럼 있음
+        for stmt in (
+            "ALTER TABLE buy_requests ADD COLUMN image TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE stock ADD COLUMN image TEXT NOT NULL DEFAULT ''",
+        ):
+            try:
+                c.execute(stmt)
+                c.commit()
+            except sqlite3.OperationalError:
+                pass  # 이미 컬럼 있음
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         if get_setting("secret") is None:
             set_setting("secret", secrets.token_hex(32))
@@ -129,11 +133,33 @@ _last_purge = 0.0
 
 
 def remove_upload(fname):
-    if fname and re.match(r"^buy_\d+\.(jpg|png|webp)$", fname):
+    if fname and re.match(r"^(buy|stock)_\d+\.(jpg|png|webp)$", fname):
         try:
             os.remove(os.path.join(UPLOAD_DIR, fname))
         except OSError:
             pass
+
+
+def decode_image(image_data):
+    """dataURL 문자열 → (bytes, 확장자). 문제가 있으면 ValueError(사용자용 메시지)."""
+    m = re.match(r"^data:image/(png|jpeg|jpg|webp);base64,", image_data)
+    if not m:
+        raise ValueError("이미지 형식이 올바르지 않습니다.")
+    try:
+        img_bytes = base64.b64decode(image_data[m.end():])
+    except Exception:
+        raise ValueError("이미지 형식이 올바르지 않습니다.")
+    if len(img_bytes) > 4 * 1024 * 1024:
+        raise ValueError("이미지가 너무 큽니다 (4MB 이하).")
+    ext = "jpg" if m.group(1) in ("jpeg", "jpg") else m.group(1)
+    return img_bytes, ext
+
+
+def save_upload(prefix, rid, img_bytes, ext):
+    fname = f"{prefix}_{rid}.{ext}"
+    with open(os.path.join(UPLOAD_DIR, fname), "wb") as f:
+        f.write(img_bytes)
+    return fname
 
 
 def purge_old():
@@ -300,7 +326,7 @@ def serve_static(path):
 def api_shop(req):
     with db_lock:
         stock = db().execute(
-            "SELECT id,item,price,qty,note FROM stock WHERE visible=1 AND qty>0 ORDER BY id DESC"
+            "SELECT id,item,price,qty,note,image FROM stock WHERE visible=1 AND qty>0 ORDER BY id DESC"
         ).fetchall()
     return json_resp({
         "notice": get_setting("notice"),
@@ -323,6 +349,26 @@ def api_my(req):
             "FROM buy_requests WHERE nickname=? COLLATE NOCASE ORDER BY id DESC LIMIT 50",
             (nickname,)).fetchall()
     return json_resp({"sell": row_dicts(sell), "buy": row_dicts(buy)})
+
+
+def api_stock_image(req):
+    """판매 물품 사진 (누구나 볼 수 있음)"""
+    try:
+        sid = int((req.query().get("id") or ["0"])[0])
+    except ValueError:
+        sid = 0
+    with db_lock:
+        row = db().execute("SELECT image FROM stock WHERE id=?", (sid,)).fetchone()
+    fname = row["image"] if row else ""
+    if not fname or not re.match(r"^stock_\d+\.(jpg|png|webp)$", fname):
+        return json_resp({"error": "이미지가 없습니다."}, 404)
+    fpath = os.path.join(UPLOAD_DIR, fname)
+    if not os.path.isfile(fpath):
+        return json_resp({"error": "이미지가 없습니다."}, 404)
+    with open(fpath, "rb") as f:
+        data = f.read()
+    ctype = "image/jpeg" if fname.endswith(".jpg") else ("image/png" if fname.endswith(".png") else "image/webp")
+    return Response(data, 200, [("Content-Type", ctype), ("Cache-Control", "no-cache")])
 
 
 def api_sell(req):
@@ -365,16 +411,10 @@ def api_buy(req):
     img_bytes, img_ext = None, None
     image_data = d.get("image") or ""
     if image_data:
-        m = re.match(r"^data:image/(png|jpeg|jpg|webp);base64,", image_data)
-        if not m:
-            return json_resp({"error": "이미지 형식이 올바르지 않습니다."}, 400)
         try:
-            img_bytes = base64.b64decode(image_data[m.end():])
-        except Exception:
-            return json_resp({"error": "이미지 형식이 올바르지 않습니다."}, 400)
-        if len(img_bytes) > 4 * 1024 * 1024:
-            return json_resp({"error": "이미지가 너무 큽니다 (4MB 이하)."}, 400)
-        img_ext = "jpg" if m.group(1) in ("jpeg", "jpg") else m.group(1)
+            img_bytes, img_ext = decode_image(image_data)
+        except ValueError as e:
+            return json_resp({"error": str(e)}, 400)
     if stock_id and not img_bytes:
         return json_resp({"error": "정가 물품 주문은 먼저 입금하고 입금내역 캡쳐를 첨부해야 합니다."}, 400)
     with db_lock:
@@ -390,9 +430,7 @@ def api_buy(req):
             (nickname, item, qty, price, note, stock_id, now(), now()))
         rid = cur.lastrowid
         if img_bytes:
-            fname = f"buy_{rid}.{img_ext}"
-            with open(os.path.join(UPLOAD_DIR, fname), "wb") as f:
-                f.write(img_bytes)
+            fname = save_upload("buy", rid, img_bytes, img_ext)
             db().execute("UPDATE buy_requests SET image=? WHERE id=?", (fname, rid))
         db().commit()
     return json_resp({"ok": True})
@@ -512,9 +550,16 @@ def api_admin_request(req):
 
 
 def api_admin_stock(req):
-    """재고 관리. {action:'add'|'update'|'delete', ...}"""
-    d = req.read_json() or {}
+    """재고 관리. {action:'add'|'update'|'delete', ..., image?: dataURL}"""
+    d = req.read_json(limit=MAX_IMAGE_BODY) or {}
     action = d.get("action")
+    # 물품 사진 (선택)
+    img_bytes, img_ext = None, None
+    if d.get("image"):
+        try:
+            img_bytes, img_ext = decode_image(d["image"])
+        except ValueError as e:
+            return json_resp({"error": str(e)}, 400)
     with db_lock:
         if action == "add":
             item = clean(d.get("item"), 60)
@@ -523,13 +568,19 @@ def api_admin_stock(req):
             note = clean(d.get("note"), 200)
             if not item or not price or not isinstance(qty, int) or qty < 0:
                 return json_resp({"error": "물품/가격/수량을 확인하세요."}, 400)
-            db().execute(
+            cur = db().execute(
                 "INSERT INTO stock(item,price,qty,note,created_at) VALUES(?,?,?,?,?)",
                 (item, price, qty, note, now()))
+            if img_bytes:
+                fname = save_upload("stock", cur.lastrowid, img_bytes, img_ext)
+                db().execute("UPDATE stock SET image=? WHERE id=?", (fname, cur.lastrowid))
         elif action == "update":
             sid = d.get("id")
             if not isinstance(sid, int):
                 return json_resp({"error": "잘못된 요청"}, 400)
+            row = db().execute("SELECT * FROM stock WHERE id=?", (sid,)).fetchone()
+            if not row:
+                return json_resp({"error": "없는 물품입니다."}, 404)
             fields, values = [], []
             if "item" in d:
                 fields.append("item=?"); values.append(clean(d["item"], 60))
@@ -541,6 +592,10 @@ def api_admin_stock(req):
                 fields.append("note=?"); values.append(clean(d["note"], 200))
             if "visible" in d:
                 fields.append("visible=?"); values.append(1 if d["visible"] else 0)
+            if img_bytes:  # 사진 교체
+                remove_upload(row["image"])
+                fields.append("image=?")
+                values.append(save_upload("stock", sid, img_bytes, img_ext))
             if not fields:
                 return json_resp({"error": "변경할 내용이 없습니다."}, 400)
             values.append(sid)
@@ -549,6 +604,9 @@ def api_admin_stock(req):
             sid = d.get("id")
             if not isinstance(sid, int):
                 return json_resp({"error": "잘못된 요청"}, 400)
+            row = db().execute("SELECT image FROM stock WHERE id=?", (sid,)).fetchone()
+            if row:
+                remove_upload(row["image"])
             db().execute("DELETE FROM stock WHERE id=?", (sid,))
         else:
             return json_resp({"error": "잘못된 요청"}, 400)
@@ -580,6 +638,7 @@ def api_admin_password(req):
 GET_ROUTES = {
     "/api/shop": api_shop,
     "/api/my": api_my,
+    "/api/stock/image": api_stock_image,
     "/api/admin/state": api_admin_state,
 }
 GET_ADMIN_ROUTES = {

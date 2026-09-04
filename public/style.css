@@ -205,6 +205,11 @@ button.small.good:hover { background: #333; }
   border: 1px solid var(--border-strong); border-radius: 8px;
 }
 .hint { color: var(--text-dim); font-size: .82rem; line-height: 1.6; margin: 10px 0 0; }
+.stock-thumb {
+  width: 56px; height: 56px; object-fit: cover; flex: none;
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  cursor: zoom-in;
+}
 
 /* 토스트 */
 #toast {
