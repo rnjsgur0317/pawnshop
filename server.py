@@ -46,7 +46,8 @@ def db():
         os.makedirs(DATA_DIR, exist_ok=True)
         _conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         _conn.row_factory = sqlite3.Row
-        _conn.execute("PRAGMA journal_mode=WAL")
+        # 주의: WAL 모드 금지 — PythonAnywhere 같은 네트워크 디스크에서 DB가 깨짐
+        _conn.execute("PRAGMA journal_mode=DELETE")
     return _conn
 
 
